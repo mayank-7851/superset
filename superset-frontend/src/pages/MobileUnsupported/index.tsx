@@ -17,33 +17,21 @@
  * under the License.
  */
 import { useCallback } from 'react';
-import { useHistory, useLocation } from 'react-router-dom';
+import { useHistory } from 'react-router-dom';
 import { t } from '@apache-superset/core/translation';
 import { css, useTheme } from '@apache-superset/core/theme';
-import { Button, Grid } from '@superset-ui/core/components';
+import { Button } from '@superset-ui/core/components';
 import { Icons } from '@superset-ui/core/components/Icons';
-
-const { useBreakpoint } = Grid;
-
-/** sessionStorage key for the "Continue anyway" mobile bypass */
-export const MOBILE_BYPASS_STORAGE_KEY = 'mobile-bypass';
-
-interface MobileUnsupportedProps {
-  /** The original path the user was trying to access */
-  originalPath?: string;
-}
 
 /**
  * A mobile-friendly page shown when users try to access
- * features that aren't supported on mobile devices.
+ * features that aren't supported on mobile devices. Growing the window
+ * past the mobile breakpoint unblocks the route automatically (useIsMobile
+ * subscribes to the breakpoint), so no manual bypass is offered.
  */
-function MobileUnsupported({ originalPath }: MobileUnsupportedProps) {
+function MobileUnsupported() {
   const theme = useTheme();
   const history = useHistory();
-  const location = useLocation();
-  const screens = useBreakpoint();
-
-  const fromPath = originalPath || location.pathname;
 
   const handleViewDashboards = useCallback(() => {
     history.push('/dashboard/list/');
@@ -52,19 +40,6 @@ function MobileUnsupported({ originalPath }: MobileUnsupportedProps) {
   const handleGoHome = useCallback(() => {
     history.push('/welcome/');
   }, [history]);
-
-  const handleContinueAnyway = useCallback(() => {
-    // Store preference in sessionStorage so we don't keep redirecting
-    try {
-      sessionStorage.setItem(MOBILE_BYPASS_STORAGE_KEY, 'true');
-    } catch {
-      // Storage access denied, continue anyway without persisting
-    }
-    history.push(fromPath);
-  }, [history, fromPath]);
-
-  // Determine if we're at or above the 'md' breakpoint (i.e. not on mobile)
-  const isNotMobile = screens.md;
 
   return (
     <div
@@ -161,34 +136,6 @@ function MobileUnsupported({ originalPath }: MobileUnsupportedProps) {
           {t('Go to Welcome Page')}
         </Button>
       </div>
-
-      {/* Continue anyway link */}
-      <Button
-        buttonStyle="link"
-        onClick={handleContinueAnyway}
-        css={css`
-          margin-top: ${theme.sizeUnit * 4}px;
-        `}
-      >
-        {t('Continue anyway')}
-        <Icons.ArrowRightOutlined iconSize="s" />
-      </Button>
-
-      {/* Show hint if screen is now larger */}
-      {isNotMobile && (
-        <p
-          css={css`
-            margin-top: ${theme.sizeUnit * 6}px;
-            font-size: ${theme.fontSizeXS}px;
-            color: ${theme.colorTextDescription};
-          `}
-        >
-          {t('Your screen is now large enough.')}
-          <Button buttonStyle="link" onClick={handleContinueAnyway}>
-            {t('Continue to page')}
-          </Button>
-        </p>
-      )}
     </div>
   );
 }

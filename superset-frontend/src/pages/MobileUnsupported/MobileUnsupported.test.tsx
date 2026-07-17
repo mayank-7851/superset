@@ -21,21 +21,6 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import MobileUnsupported from './index';
 
-// Mock useBreakpoint to return mobile by default
-jest.mock('antd', () => ({
-  ...jest.requireActual('antd'),
-  Grid: {
-    ...jest.requireActual('antd').Grid,
-    useBreakpoint: () => ({
-      xs: true,
-      sm: true,
-      md: false,
-      lg: false,
-      xl: false,
-    }),
-  },
-}));
-
 // Mock useHistory
 const mockPush = jest.fn();
 jest.mock('react-router-dom', () => ({
@@ -45,26 +30,14 @@ jest.mock('react-router-dom', () => ({
   }),
 }));
 
-// Store original sessionStorage
-const originalSessionStorage = window.sessionStorage;
-
 beforeEach(() => {
   jest.clearAllMocks();
-  sessionStorage.clear();
 });
 
-afterEach(() => {
-  // Restore sessionStorage
-  Object.defineProperty(window, 'sessionStorage', {
-    value: originalSessionStorage,
-    writable: true,
-  });
-});
-
-const renderComponent = (props = {}) =>
+const renderComponent = () =>
   render(
     <MemoryRouter initialEntries={['/chart/list/']}>
-      <MobileUnsupported {...props} />
+      <MobileUnsupported />
     </MemoryRouter>,
   );
 
@@ -98,9 +71,9 @@ test('renders the Go to Welcome Page button', () => {
   ).toBeInTheDocument();
 });
 
-test('renders the Continue anyway link', () => {
+test('does not render a Continue anyway bypass', () => {
   renderComponent();
-  expect(screen.getByText(/Continue anyway/)).toBeInTheDocument();
+  expect(screen.queryByText(/Continue anyway/)).not.toBeInTheDocument();
 });
 
 test('View Dashboards button navigates to dashboard list', async () => {
@@ -119,61 +92,4 @@ test('Go to Welcome Page button navigates to welcome page', async () => {
   await userEvent.click(button);
 
   expect(mockPush).toHaveBeenCalledWith('/welcome/');
-});
-
-test('Continue anyway sets sessionStorage and navigates to original path', async () => {
-  renderComponent({ originalPath: '/chart/list/' });
-
-  const link = screen.getByText(/Continue anyway/);
-  await userEvent.click(link);
-
-  expect(sessionStorage.getItem('mobile-bypass')).toBe('true');
-  expect(mockPush).toHaveBeenCalledWith('/chart/list/');
-});
-
-test('uses originalPath prop when provided', async () => {
-  renderComponent({ originalPath: '/explore/?form_data=123' });
-
-  const link = screen.getByText(/Continue anyway/);
-  await userEvent.click(link);
-
-  expect(mockPush).toHaveBeenCalledWith('/explore/?form_data=123');
-});
-
-test('handles sessionStorage errors gracefully', async () => {
-  // Mock sessionStorage to throw
-  const mockStorage = {
-    getItem: jest.fn(() => {
-      throw new Error('Storage access denied');
-    }),
-    setItem: jest.fn(() => {
-      throw new Error('Storage access denied');
-    }),
-    removeItem: jest.fn(),
-    clear: jest.fn(),
-    length: 0,
-    key: jest.fn(),
-  };
-  Object.defineProperty(window, 'sessionStorage', {
-    value: mockStorage,
-    writable: true,
-  });
-
-  renderComponent({ originalPath: '/chart/list/' });
-
-  const link = screen.getByText(/Continue anyway/);
-  // Should not throw even though sessionStorage fails
-  await userEvent.click(link);
-
-  // Should still navigate even if storage failed
-  expect(mockPush).toHaveBeenCalledWith('/chart/list/');
-});
-
-test('renders desktop icon', () => {
-  renderComponent();
-  // The icon should be present (DesktopOutlined)
-  // Icon might not have aria-label, so we verify the page renders with the title
-  expect(
-    screen.getByText("This view isn't available on mobile"),
-  ).toBeInTheDocument();
 });

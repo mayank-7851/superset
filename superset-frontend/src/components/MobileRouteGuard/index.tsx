@@ -16,12 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { ReactNode, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { ReactNode } from 'react';
 import { useIsMobile } from 'src/hooks/useIsMobile';
-import MobileUnsupported, {
-  MOBILE_BYPASS_STORAGE_KEY,
-} from 'src/pages/MobileUnsupported';
+import MobileUnsupported from 'src/pages/MobileUnsupported';
 
 interface MobileRouteGuardProps {
   children: ReactNode;
@@ -36,43 +33,20 @@ interface MobileRouteGuardProps {
 /**
  * Wraps route content and shows the MobileUnsupported page when a
  * non-mobile-friendly route is accessed on a small screen with
- * MOBILE_CONSUMPTION_MODE enabled.
- *
- * Users can bypass this by clicking "Continue anyway", which sets a
- * sessionStorage flag for the rest of the browser session.
+ * MOBILE_CONSUMPTION_MODE enabled. Growing the viewport past the
+ * breakpoint unblocks the route automatically.
  */
 function MobileRouteGuard({
   children,
   mobileSupported,
 }: MobileRouteGuardProps) {
   const isMobile = useIsMobile();
-  const location = useLocation();
-  const [bypassEnabled, setBypassEnabled] = useState(() => {
-    try {
-      return sessionStorage.getItem(MOBILE_BYPASS_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
 
-  // Check for bypass flag when location changes
-  useEffect(() => {
-    try {
-      const bypass =
-        sessionStorage.getItem(MOBILE_BYPASS_STORAGE_KEY) === 'true';
-      setBypassEnabled(bypass);
-    } catch {
-      // Storage access denied, keep current state
-    }
-  }, [location.pathname]);
-
-  if (!isMobile || bypassEnabled || mobileSupported) {
+  if (!isMobile || mobileSupported) {
     return <>{children}</>;
   }
 
-  return (
-    <MobileUnsupported originalPath={location.pathname + location.search} />
-  );
+  return <MobileUnsupported />;
 }
 
 export default MobileRouteGuard;

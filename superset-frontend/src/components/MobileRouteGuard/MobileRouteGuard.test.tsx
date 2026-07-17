@@ -20,7 +20,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { render, screen } from 'spec/helpers/testing-library';
 import { useIsMobile } from 'src/hooks/useIsMobile';
 import MobileRouteGuard from '.';
-import { MOBILE_BYPASS_STORAGE_KEY } from '../../pages/MobileUnsupported';
 
 jest.mock('src/hooks/useIsMobile', () => ({
   useIsMobile: jest.fn(),
@@ -41,7 +40,6 @@ const renderGuard = (mobileSupported?: boolean) =>
   );
 
 beforeEach(() => {
-  sessionStorage.clear();
   mockedUseIsMobile.mockReturnValue(false);
 });
 
@@ -63,11 +61,4 @@ test('shows the unsupported screen on mobile for unsupported routes', () => {
   expect(
     screen.getByText("This view isn't available on mobile"),
   ).toBeInTheDocument();
-});
-
-test('renders children on mobile when the bypass flag is set', () => {
-  mockedUseIsMobile.mockReturnValue(true);
-  sessionStorage.setItem(MOBILE_BYPASS_STORAGE_KEY, 'true');
-  renderGuard(undefined);
-  expect(screen.getByTestId('guarded-content')).toBeInTheDocument();
 });
