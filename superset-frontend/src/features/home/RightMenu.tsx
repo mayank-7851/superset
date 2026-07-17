@@ -107,10 +107,12 @@ const StyledMenuItem = styled.div<{ disabled?: boolean }>`
       color: ${!disabled && theme.colorPrimary};
       cursor: ${!disabled ? 'pointer' : 'not-allowed'};
     }
-    ${disabled &&
-    css`
-      color: ${theme.colorTextDisabled};
-    `}
+    ${
+      disabled &&
+      css`
+        color: ${theme.colorTextDisabled};
+      `
+    }
   `}
 `;
 
@@ -794,6 +796,21 @@ const RightMenu = ({
               selectable={false}
               onClick={info => {
                 handleMenuSelection(info);
+                // The reused desktop items navigate via anchors that only
+                // span their label text, but the drawer's tap target is the
+                // full menu row — navigate explicitly so row taps work.
+                if (info.key === 'info' && navbarRight.user_info_url) {
+                  window.location.assign(
+                    ensureAppRoot(navbarRight.user_info_url),
+                  );
+                  return;
+                }
+                if (info.key === 'logout' && navbarRight.user_logout_url) {
+                  window.location.assign(
+                    ensureAppRoot(navbarRight.user_logout_url),
+                  );
+                  return;
+                }
                 setMobileMenuOpen(false);
               }}
               items={mobileMenuItems}
