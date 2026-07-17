@@ -94,6 +94,14 @@ const StyledTabsContainer = styled.div<{ isDragging?: boolean }>`
           z-index: 100;
           background-color: ${theme.colorBgContainer};
         }
+
+        /* Swipeable tab bar instead of the overflow dropdown: the "more"
+           menu is a poor touch target and duplicates half-clipped tabs.
+           antd's tab nav supports touch-drag scrolling natively and shows
+           edge shadows (ping classes) when tabs overflow. */
+        .ant-tabs-nav-operations {
+          display: none !important;
+        }
       }
     `}
 `;
