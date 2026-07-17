@@ -32,8 +32,20 @@
  * one fails here with a clear pointer instead of shipping a visual regression.
  */
 import { render } from '@superset-ui/core/spec';
-// eslint-disable-next-line no-restricted-imports
-import { Collapse, Modal, Popover, Steps, Tabs, Tag, Tooltip } from 'antd';
+import {
+  // eslint-disable-next-line no-restricted-imports
+  Alert,
+  Collapse,
+  Modal,
+  Popover,
+  Progress,
+  Spin,
+  Steps,
+  Tabs,
+  Tag,
+  Tooltip,
+  Upload,
+} from 'antd';
 import { Select } from './Select';
 
 const antClasses = (root: ParentNode): string[] => {
@@ -176,9 +188,17 @@ test('Steps classes (QueryStatusBar, ChartCreation, SQL Lab loading detection)',
       'ant-steps-item-icon',
       'ant-steps-item-title',
       'ant-steps-item-rail',
+      'ant-steps-item-content',
     ]),
   );
   expect(classes).not.toContain('ant-steps-item-tail');
+  // antd 6 removed the nested `.ant-steps-item-description`; the description text
+  // now renders directly inside `.ant-steps-item-content`. ChartCreation styles
+  // the description by targeting `.ant-steps-item-content` for exactly this reason.
+  expect(classes).not.toContain('ant-steps-item-description');
+  expect(container.querySelector('.ant-steps-item-content')).toHaveTextContent(
+    'd',
+  );
 });
 
 test('Select suffix (arrow) class (plugin-chart-table page-size Select targets it)', () => {
@@ -216,13 +236,87 @@ test('Collapse panel/body classes (Collapse.tsx, VizTypeGallery, config modals)'
   expect(classes).not.toContain('ant-collapse-content-box');
 });
 
-test('Modal body class (many *.styles.ts modal overrides target it)', () => {
+test('Modal container + body classes (many *.styles.ts modal overrides target them)', () => {
   render(
     <Modal open title="t">
       body
     </Modal>,
   );
-  expect(antClasses(document.body)).toContain('ant-modal-body');
+  const classes = antClasses(document.body);
+  // antd 6 renamed the modal content wrapper `.ant-modal-content` ->
+  // `.ant-modal-container`. Several `.styles.ts` overrides target it, and Select /
+  // popup `getPopupContainer`/`.closest()` lookups anchor popups to it so their
+  // menus stay clipped inside the modal.
+  expect(classes).toEqual(
+    expect.arrayContaining(['ant-modal-container', 'ant-modal-body']),
+  );
+  expect(classes).not.toContain('ant-modal-content');
+});
+
+test('Progress rail/track classes (ProgressBar + DatabaseModal striped overrides target them)', () => {
+  const { container } = render(<Progress percent={50} />);
+  const classes = antClasses(container);
+  // antd 6 renamed `.ant-progress-inner` -> `.ant-progress-rail` and
+  // `.ant-progress-bg` -> `.ant-progress-track`. ProgressBar's styled wrapper
+  // paints the striped gradient on the track; DatabaseModal sizes the rail.
+  expect(classes).toEqual(
+    expect.arrayContaining(['ant-progress-rail', 'ant-progress-track']),
+  );
+  expect(classes).not.toContain('ant-progress-inner');
+  expect(classes).not.toContain('ant-progress-bg');
+});
+
+test('Alert title/actions classes (ImportModal, DatabaseModal, SqlEditor, native-filter overrides target them)', () => {
+  const { container } = render(
+    <Alert
+      type="info"
+      title="msg"
+      description="desc"
+      action={<span>x</span>}
+    />,
+  );
+  const classes = antClasses(container);
+  // antd 6 renamed `.ant-alert-message` -> `.ant-alert-title` and pluralised the
+  // action slot `.ant-alert-action` -> `.ant-alert-actions`. Several `.styles.ts`
+  // overrides and the SQL Lab / native-filter modal footers target these.
+  expect(classes).toEqual(
+    expect.arrayContaining(['ant-alert-title', 'ant-alert-actions']),
+  );
+  expect(classes).not.toContain('ant-alert-message');
+  expect(classes).not.toContain('ant-alert-action');
+});
+
+test('Spin nested structure (Table/VirtualTable spinner sizing overrides target it)', () => {
+  const { container } = render(
+    <Spin spinning>
+      <div>content</div>
+    </Spin>,
+  );
+  const classes = antClasses(container);
+  // antd 6 dropped the `.ant-spin-nested-loading` wrapper: `.ant-spin` is now the
+  // outer element and `.ant-spin-dot` lives beneath it. Table/VirtualTable size the
+  // dot via `.ant-spin .ant-spin-dot`, so that descendant chain must hold.
+  expect(classes).toEqual(
+    expect.arrayContaining(['ant-spin', 'ant-spin-container', 'ant-spin-dot']),
+  );
+  expect(classes).not.toContain('ant-spin-nested-loading');
+  expect(
+    container.querySelector('.ant-spin-dot')?.closest('.ant-spin'),
+  ).not.toBeNull();
+});
+
+test('Upload list-item actions class (DatabaseModal hides the imported-file action button)', () => {
+  const { container } = render(
+    <Upload fileList={[{ uid: '1', name: 'database.zip', status: 'done' }]}>
+      <button type="button">upload</button>
+    </Upload>,
+  );
+  const classes = antClasses(container);
+  // antd 6 renamed the upload list-item action-button container
+  // `.ant-upload-list-item-card-actions` -> `.ant-upload-list-item-actions`.
+  // DatabaseModal hides that action button on the imported-database file item.
+  expect(classes).toContain('ant-upload-list-item-actions');
+  expect(classes).not.toContain('ant-upload-list-item-card-actions');
 });
 
 test('Tag keeps its v5 trailing margin (GlobalStyles parity rule)', () => {
