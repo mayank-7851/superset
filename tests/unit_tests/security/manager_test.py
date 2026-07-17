@@ -348,6 +348,286 @@ def test_raise_for_access_guest_user_tampered_queries_columns(
         sm.raise_for_access(query_context=query_context)
 
 
+def _base_axis_physical_column(name: str, time_grain: str = "P1D") -> dict[str, Any]:
+    """
+    The synthesized x-axis column ``normalizeTimeColumn`` emits for a *physical*
+    x-axis (see superset-ui-core ``normalizeTimeColumn.ts``): a pure column
+    reference wrapped with the BASE_AXIS markers and the chart's time grain.
+    """
+    return {
+        "timeGrain": time_grain,
+        "columnType": "BASE_AXIS",
+        "sqlExpression": name,
+        "label": name,
+        "expressionType": "SQL",
+        "isColumnReference": True,
+    }
+
+
+def _guest_query(columns: list[Any], metrics: list[AdhocMetric]) -> QueryObject:
+    """A QueryObject carrying the given columns/metrics, as a guest request would."""
+    return QueryObject(columns=columns, metrics=metrics)  # type: ignore[arg-type]
+
+
+def test_raise_for_access_guest_user_ok_base_axis_physical_x_axis(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    A guest may load a chart whose saved ``query_context`` is NULL and whose
+    x-axis is a physical column. ``normalizeTimeColumn`` sends the x-axis as a
+    synthesized ``BASE_AXIS`` column that never appears verbatim in the stored
+    ``params`` (the x-axis lives under its own ``x_axis`` control), so before the
+    carve-out this legitimate load was rejected with a 403.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = None
+    query_context.slice_.params_dict = {
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.queries = [
+        _guest_query([_base_axis_physical_column("order_date")], stored_metrics)
+    ]
+    sm.raise_for_access(query_context=query_context)
+
+
+def test_raise_for_access_guest_user_ok_base_axis_adhoc_x_axis(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    Same as above for an *adhoc* x-axis: ``normalizeTimeColumn`` copies the saved
+    adhoc column and adds the BASE_AXIS markers, so the request carries the saved
+    x-axis plus synthesized decorations and must not read as tampering.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    adhoc_x_axis: dict[str, Any] = {
+        "label": "order month",
+        "sqlExpression": "DATE_TRUNC('month', order_date)",
+        "expressionType": "SQL",
+    }
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = None
+    query_context.slice_.params_dict = {
+        "x_axis": adhoc_x_axis,
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": adhoc_x_axis,
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    synthesized = {"timeGrain": "P1M", "columnType": "BASE_AXIS", **adhoc_x_axis}
+    query_context.queries = [_guest_query([synthesized], stored_metrics)]
+    sm.raise_for_access(query_context=query_context)
+
+
+def test_raise_for_access_guest_user_base_axis_forged_column_reference(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    The BASE_AXIS carve-out must not become a smuggling channel: a column tagged
+    ``BASE_AXIS`` that references a column the chart never exposed is still
+    rejected. Here the forged reference points at ``secret_col`` while the stored
+    x-axis is ``order_date``.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = None
+    query_context.slice_.params_dict = {
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.queries = [
+        _guest_query([_base_axis_physical_column("secret_col")], stored_metrics)
+    ]
+    with pytest.raises(SupersetSecurityException):
+        sm.raise_for_access(query_context=query_context)
+
+
+def test_raise_for_access_guest_user_base_axis_forged_adhoc_expression(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    A BASE_AXIS-tagged adhoc column whose SQL body differs from the saved x-axis
+    is rejected: tagging free-form SQL as BASE_AXIS must not authorize it.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    adhoc_x_axis: dict[str, Any] = {
+        "label": "order month",
+        "sqlExpression": "DATE_TRUNC('month', order_date)",
+        "expressionType": "SQL",
+    }
+    forged = {
+        "timeGrain": "P1M",
+        "columnType": "BASE_AXIS",
+        "label": "order month",
+        "sqlExpression": "list_secret()",
+        "expressionType": "SQL",
+    }
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = None
+    query_context.slice_.params_dict = {
+        "x_axis": adhoc_x_axis,
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": adhoc_x_axis,
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.queries = [_guest_query([forged], stored_metrics)]
+    with pytest.raises(SupersetSecurityException):
+        sm.raise_for_access(query_context=query_context)
+
+
+def test_raise_for_access_guest_user_ok_base_axis_stale_query_context(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    A chart with a *stale* (non-NULL) saved ``query_context`` from an older
+    frontend that predates the BASE_AXIS column still loads: the x-axis carve-out
+    is sourced from ``params`` rather than the stored ``query_context``, so a
+    stored context that lacks the synthesized column does not reject the guest.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = json.dumps(
+        {"queries": [{"columns": [], "metrics": stored_metrics}]}
+    )
+    query_context.slice_.params_dict = {
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.queries = [
+        _guest_query([_base_axis_physical_column("order_date")], stored_metrics)
+    ]
+    sm.raise_for_access(query_context=query_context)
+
+
+def test_raise_for_access_guest_user_ok_base_axis_orderby(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    A guest may sort an embedded chart by its own temporal x-axis, which the
+    frontend sends as the synthesized BASE_AXIS column in the order-by term.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    base_axis = _base_axis_physical_column("order_date")
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = None
+    query_context.slice_.params_dict = {
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+        "orderby": [[base_axis, True]],
+    }
+    query_context.queries = [_guest_query([base_axis], stored_metrics)]
+    sm.raise_for_access(query_context=query_context)
+
+
+def test_raise_for_access_guest_user_base_axis_orderby_forged(
+    mocker: MockerFixture,
+    app_context: None,
+    stored_metrics: list[AdhocMetric],
+) -> None:
+    """
+    The order-by carve-out is bounded: sorting by a BASE_AXIS-tagged column that
+    references a column the chart never exposed is still rejected.
+    """
+    sm = SupersetSecurityManager(appbuilder)
+    mocker.patch.object(sm, "is_guest_user", return_value=True)
+    mocker.patch.object(sm, "can_access", return_value=True)
+
+    query_context = mocker.MagicMock()
+    query_context.slice_.id = 42
+    query_context.slice_.query_context = None
+    query_context.slice_.params_dict = {
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+    }
+    query_context.form_data = {
+        "slice_id": 42,
+        "x_axis": "order_date",
+        "metrics": stored_metrics,
+        "columns": [],
+        "orderby": [[_base_axis_physical_column("secret_col"), True]],
+    }
+    query_context.queries = [
+        _guest_query([_base_axis_physical_column("order_date")], stored_metrics)
+    ]
+    with pytest.raises(SupersetSecurityException):
+        sm.raise_for_access(query_context=query_context)
+
+
 def test_raise_for_access_query_default_schema(
     mocker: MockerFixture,
     app_context: None,
