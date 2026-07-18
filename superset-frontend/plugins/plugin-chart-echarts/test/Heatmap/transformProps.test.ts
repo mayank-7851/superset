@@ -359,4 +359,130 @@ describe('Heatmap transformProps', () => {
     );
     expect((resultWithoutLegend.echartOptions.legend as any).show).toBe(false);
   });
+
+  test('should handle single data point (filtered to one region)', () => {
+    const singleRowData = [{ day_of_week: 'Monday', hour: 9, count: 42 }];
+    const chartProps = createChartProps({}, singleRowData);
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    const seriesData = (result.echartOptions.series as any)[0].data;
+
+    expect(xAxisData).toEqual(['Monday']);
+    expect(yAxisData).toEqual([9]);
+    expect(seriesData).toHaveLength(1);
+    // Single data point should map to [0, 0, metricValue]
+    expect(seriesData[0]).toEqual([0, 0, 42]);
+  });
+
+  test('should handle empty data gracefully', () => {
+    const chartProps = createChartProps({}, []);
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    const seriesData = (result.echartOptions.series as any)[0].data;
+
+    expect(xAxisData).toEqual([]);
+    expect(yAxisData).toEqual([]);
+    expect(seriesData).toEqual([]);
+  });
+
+  test('should handle null metric values without crashing', () => {
+    const dataWithNullMetric = [
+      { day_of_week: 'Monday', hour: 9, count: null },
+      { day_of_week: 'Monday', hour: 14, count: 15 },
+    ];
+    const chartProps = createChartProps({}, dataWithNullMetric);
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    const seriesData = (result.echartOptions.series as any)[0].data;
+    // Both rows should produce data points (ECharts handles null rendering)
+    expect(seriesData).toHaveLength(2);
+  });
+
+  test('should handle single row with null x-axis label', () => {
+    const dataWithNullX = [
+      { day_of_week: null, hour: 9, count: 42 },
+    ];
+    const chartProps = createChartProps({}, dataWithNullX);
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    // No valid x-axis values → empty chart, no crash
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    const seriesData = (result.echartOptions.series as any)[0].data;
+
+    expect(xAxisData).toEqual([]);
+    expect(seriesData).toEqual([]);
+  });
+
+  test('should handle single row with null y-axis label', () => {
+    const dataWithNullY = [
+      { day_of_week: 'Monday', hour: null, count: 42 },
+    ];
+    const chartProps = createChartProps({}, dataWithNullY);
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    // No valid y-axis values → empty chart, no crash
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    const seriesData = (result.echartOptions.series as any)[0].data;
+
+    expect(yAxisData).toEqual([]);
+    expect(seriesData).toEqual([]);
+  });
+
+  test('should handle multiple regions correctly (regression check)', () => {
+    const multiData = [
+      { day_of_week: 'Monday', hour: 9, count: 10 },
+      { day_of_week: 'Monday', hour: 14, count: 15 },
+      { day_of_week: 'Friday', hour: 16, count: 20 },
+      { day_of_week: 'Tuesday', hour: 10, count: 12 },
+    ];
+    const chartProps = createChartProps({}, multiData);
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    const seriesData = (result.echartOptions.series as any)[0].data;
+
+    expect(xAxisData).toHaveLength(3); // Monday, Friday, Tuesday
+    expect(yAxisData).toHaveLength(4); // 9, 14, 16, 10
+    expect(seriesData).toHaveLength(4);
+  });
+
+  test('should handle single data point with normalized=true', () => {
+    const singleRowWithRank = [
+      { day_of_week: 'Monday', hour: 9, count: 42, rank: 1.0 },
+    ];
+    const chartProps = createChartProps(
+      { normalized: true },
+      singleRowWithRank,
+    );
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    const seriesData = (result.echartOptions.series as any)[0].data;
+    expect(seriesData).toHaveLength(1);
+    // Normalized mode includes rank as 4th dimension
+    expect(seriesData[0]).toEqual([0, 0, 42, 1.0]);
+    expect((result.echartOptions.visualMap as any).dimension).toBe(3);
+  });
+
+  test('should handle normalizeAcross y with groupby array', () => {
+    const data = [
+      { day_of_week: 'Monday', hour: 9, count: 10 },
+      { day_of_week: 'Monday', hour: 14, count: 15 },
+    ];
+    const chartProps = createChartProps(
+      {
+        normalizeAcross: 'y',
+        groupby: ['hour'],
+      },
+      data,
+    );
+    // Should not crash — transformProps should resolve groupby[0] correctly
+    const result = transformProps(chartProps as HeatmapChartProps);
+    expect(result.echartOptions).toBeDefined();
+    expect((result.echartOptions.yAxis as any).data).toHaveLength(2);
+  });
 });

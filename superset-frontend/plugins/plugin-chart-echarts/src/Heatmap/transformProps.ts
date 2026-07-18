@@ -19,6 +19,7 @@
 import {
   NumberFormats,
   QueryFormColumn,
+  ensureIsArray,
   getColumnLabel,
   getMetricLabel,
   getSequentialSchemeRegistry,
@@ -205,8 +206,10 @@ export default function transformProps(
   } = formData;
   const metricLabel = getMetricLabel(metric);
   const xAxisLabel = getColumnLabel(xAxis);
-  // groupby is overridden to be a single value
-  const yAxisLabel = getColumnLabel(groupby as unknown as QueryFormColumn);
+  // groupby is overridden to be a single value — extract first element
+  const yAxisLabel = getColumnLabel(
+    ensureIsArray(groupby)[0] as unknown as QueryFormColumn,
+  );
   const {
     data,
     colnames,
