@@ -1,0 +1,18 @@
+name: Octo Verify
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: System deps
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libsasl2-dev libldap2-dev libssl-dev libpq-dev default-libmysqlclient-dev pkg-config
+      - name: Install Superset (pinned)
+        run: |
+          pip install -q -r requirements/development.txt
+          pip install -q -e . --no-deps
+      - name: Octo-verified test (reproduction → pass)
+        run: python -m pytest tests/unit_tests/pandas_postprocessing/test_rank.py -v
