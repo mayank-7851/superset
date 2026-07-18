@@ -60,6 +60,59 @@ test('should ALWAYS include rank operation when normalized=true', () => {
   expect(rankOperation?.operation).toBe('rank');
 });
 
+test('should set group_by from x_axis when normalize_across=x', () => {
+  const rankOp = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'x',
+  });
+
+  expect(rankOp).toBeDefined();
+  expect(rankOp?.options?.group_by).toBe('category');
+});
+
+test('should set group_by from groupby when normalize_across=y', () => {
+  const rankOp = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'y',
+  });
+
+  expect(rankOp).toBeDefined();
+  // groupby is ['region'] — should extract first element as group_by
+  expect(rankOp?.options?.group_by).toBe('region');
+});
+
+test('should set group_by to undefined when normalize_across=heatmap', () => {
+  const rankOp = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'heatmap',
+  });
+
+  expect(rankOp).toBeDefined();
+  expect(rankOp?.options?.group_by).toBeUndefined();
+});
+
+test('should set group_by to undefined when normalize_across is not set', () => {
+  const rankOp = getRankOperation({
+    ...baseFormData,
+    // normalize_across not set
+  });
+
+  expect(rankOp).toBeDefined();
+  expect(rankOp?.options?.group_by).toBeUndefined();
+});
+
+test('should handle groupby with multiple values for normalize_across=y', () => {
+  const rankOp = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'y',
+    groupby: ['region', 'product'],
+  });
+
+  expect(rankOp).toBeDefined();
+  // Should use first element of groupby array
+  expect(rankOp?.options?.group_by).toBe('region');
+});
+
 test('should ALWAYS include rank operation when normalized=false', () => {
   const rankOperation = getRankOperation({
     ...baseFormData,

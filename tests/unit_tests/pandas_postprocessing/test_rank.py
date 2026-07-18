@@ -52,3 +52,92 @@ def test_rank_single_cat():
 
     assert tmp_df["rank"].min() == 1.0 / len(tmp_df)
     assert tmp_df["rank"].max() == 1.0
+
+
+def test_rank_single_row_with_group_by():
+    """Rank should handle a single row with group_by without error."""
+    import pandas as pd
+
+    df = pd.DataFrame({"dept": ["dept0"], "value": [42]})
+    result = pp.rank(df, "value", "dept")
+    assert result["rank"].iloc[0] == 1.0
+    assert len(result) == 1
+
+
+def test_rank_single_row_no_group_by():
+    """Rank should handle a single row without group_by."""
+    import pandas as pd
+
+    df = pd.DataFrame({"value": [42]})
+    result = pp.rank(df, "value")
+    assert result["rank"].iloc[0] == 1.0
+    assert len(result) == 1
+
+
+def test_rank_empty_dataframe():
+    """Rank should handle an empty DataFrame gracefully."""
+    import pandas as pd
+
+    df = pd.DataFrame({"dept": pd.Series(dtype="str"), "value": pd.Series(dtype="float64")})
+    result = pp.rank(df, "value", "dept")
+    assert len(result) == 0
+    assert "rank" in result.columns
+
+
+def test_rank_all_null_metric_values():
+    """Rank should handle a column where all metric values are null."""
+    import pandas as pd
+
+    df = pd.DataFrame({"dept": ["a", "a", "b"], "value": [np.nan, np.nan, np.nan]})
+    result = pp.rank(df, "value", "dept")
+    # All rank values should be NaN (pandas rank of all NaN produces NaN)
+    assert result["rank"].isna().all()
+
+
+def test_rank_mixed_null_metric_values():
+    """Rank should handle mixed null and non-null metric values."""
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {"dept": ["a", "a", "a"], "value": [10, np.nan, 30]}
+    )
+    result = pp.rank(df, "value", "dept")
+    # Non-null values should have valid ranks
+    assert result.loc[0, "rank"] == 0.5  # lower of two non-null
+    assert result.loc[2, "rank"] == 1.0  # higher of two non-null
+    assert np.isnan(result.loc[1, "rank"])  # null stays null
+
+
+def test_rank_group_by_column_all_same():
+    """Rank with group_by where all rows have the same group value (like single region filter)."""
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "region": ["East", "East", "East", "East", "East"],
+            "sales": [100, 200, 300, 400, 500],
+        }
+    )
+    result = pp.rank(df, "sales", "region")
+    assert len(result) == 5
+    assert "rank" in result.columns
+    # Ranks should be evenly distributed 0.2, 0.4, 0.6, 0.8, 1.0
+    assert result["rank"].min() == 0.2
+    assert result["rank"].max() == 1.0
+    assert np.isclose(result["rank"].iloc[0], 0.2)
+    assert np.isclose(result["rank"].iloc[4], 1.0)
+
+
+def test_rank_two_groups_one_row_each():
+    """Rank with group_by where each group has exactly one row."""
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {
+            "dept": ["dept0", "dept1"],
+            "value": [10, 20],
+        }
+    )
+    result = pp.rank(df, "value", "dept")
+    # Each group has one row, so each rank should be 1.0
+    assert (result["rank"] == 1.0).all()
