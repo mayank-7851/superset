@@ -359,4 +359,146 @@ describe('Heatmap transformProps', () => {
     );
     expect((resultWithoutLegend.echartOptions.legend as any).show).toBe(false);
   });
+
+  test('should render correctly with a single region (one y-axis value)', () => {
+    const singleRegionData = [
+      { day_of_week: 'Monday', hour: 9, count: 10 },
+      { day_of_week: 'Wednesday', hour: 9, count: 8 },
+      { day_of_week: 'Friday', hour: 9, count: 20 },
+    ];
+
+    const chartProps = createChartProps(
+      { sortYAxis: undefined },
+      singleRegionData,
+    );
+    (chartProps as any).queriesData[0].colnames = [
+      'day_of_week',
+      'hour',
+      'count',
+    ];
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    expect(yAxisData).toEqual([9]);
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    expect(xAxisData).toHaveLength(3);
+    const seriesData = (result.echartOptions.series as any)[0].data;
+    expect(seriesData.length).toBe(3);
+  });
+
+  test('should render correctly with a single x-axis value', () => {
+    const singleXData = [
+      { day_of_week: 'Monday', hour: 9, count: 10 },
+      { day_of_week: 'Monday', hour: 14, count: 15 },
+      { day_of_week: 'Monday', hour: 11, count: 8 },
+    ];
+
+    const chartProps = createChartProps({}, singleXData);
+    (chartProps as any).queriesData[0].colnames = [
+      'day_of_week',
+      'hour',
+      'count',
+    ];
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    expect(xAxisData).toEqual(['Monday']);
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    expect(yAxisData).toHaveLength(3);
+    const seriesData = (result.echartOptions.series as any)[0].data;
+    expect(seriesData.length).toBe(3);
+  });
+
+  test('should handle single cell (one x and one y value)', () => {
+    const singleCellData = [
+      { day_of_week: 'Monday', hour: 9, count: 42 },
+    ];
+
+    const chartProps = createChartProps({}, singleCellData);
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    expect((result.echartOptions.xAxis as any).data).toEqual(['Monday']);
+    expect((result.echartOptions.yAxis as any).data).toEqual([9]);
+    const seriesData = (result.echartOptions.series as any)[0].data;
+    expect(seriesData.length).toBe(1);
+    expect(seriesData[0][0]).toBe(0);
+    expect(seriesData[0][1]).toBe(0);
+  });
+
+  test('should handle empty data gracefully', () => {
+    const chartProps = createChartProps({}, []);
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    expect((result.echartOptions.xAxis as any).data).toEqual([]);
+    expect((result.echartOptions.yAxis as any).data).toEqual([]);
+  });
+
+  test('should handle region names with special characters', () => {
+    const specialCharData = [
+      { day_of_week: 'Lun & Mar', hour: 'AM/PM', count: 10 },
+      { day_of_week: 'Lun & Mar', hour: 'Noon', count: 15 },
+    ];
+
+    const chartProps = createChartProps(
+      { xAxis: 'day_of_week', groupby: ['hour'] },
+      specialCharData,
+    );
+    (chartProps as any).queriesData[0].colnames = [
+      'day_of_week',
+      'hour',
+      'count',
+    ];
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    const xAxisData = (result.echartOptions.xAxis as any).data;
+    expect(xAxisData).toContain('Lun & Mar');
+    const yAxisData = (result.echartOptions.yAxis as any).data;
+    expect(yAxisData).toContain('AM/PM');
+    expect(yAxisData).toContain('Noon');
+    expect(result.echartOptions.tooltip).toBeDefined();
+  });
+
+  test('should not crash with malformed filter (non-existent column in data)', () => {
+    const dataWithMissingCol = [
+      { day_of_week: 'Monday', hour: 9, count: 10 },
+    ];
+
+    const chartProps = createChartProps(
+      { xAxis: 'day_of_week', groupby: ['hour'] },
+      dataWithMissingCol,
+    );
+    (chartProps as any).queriesData[0].colnames = [
+      'non_existent_col',
+      'hour',
+      'count',
+    ];
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+  });
+
+  test('should handle data with no metric values gracefully', () => {
+    const noMetricData = [
+      { day_of_week: 'Monday', hour: 9, count: null },
+      { day_of_week: 'Tuesday', hour: 9, count: null },
+    ];
+
+    const chartProps = createChartProps({}, noMetricData);
+
+    const result = transformProps(chartProps as HeatmapChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    expect((result.echartOptions.xAxis as any).data).toHaveLength(2);
+  });
 });

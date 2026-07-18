@@ -79,3 +79,77 @@ test('should ALWAYS include rank operation when normalized is undefined', () => 
   expect(rankOperation).toBeDefined();
   expect(rankOperation?.operation).toBe('rank');
 });
+
+test('group_by should be undefined when normalize_across is "heatmap"', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'heatmap',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBeUndefined();
+});
+
+test('group_by should be x_axis column label when normalize_across is "x"', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'x',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBe('category');
+});
+
+test('group_by should be groupby column label when normalize_across is "y"', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    normalize_across: 'y',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBe('region');
+});
+
+test('group_by from groupby works with a single groupby value', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    groupby: ['region'],
+    normalize_across: 'y',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBe('region');
+});
+
+test('group_by from groupby works with multiple groupby values (uses first)', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    groupby: ['region', 'sub_region'],
+    normalize_across: 'y',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBe('region');
+});
+
+test('group_by is undefined for normalize_across y with no groupby', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    groupby: [],
+    normalize_across: 'y',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBeUndefined();
+});
+
+test('group_by is undefined for normalize_across y with undefined groupby', () => {
+  const rankOperation = getRankOperation({
+    ...baseFormData,
+    groupby: undefined,
+    normalize_across: 'y',
+  });
+
+  expect(rankOperation).toBeDefined();
+  expect(rankOperation?.options?.group_by).toBeUndefined();
+});

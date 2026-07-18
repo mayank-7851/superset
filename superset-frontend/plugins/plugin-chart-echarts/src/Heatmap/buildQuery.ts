@@ -17,7 +17,6 @@
  * under the License.
  */
 import {
-  QueryFormColumn,
   QueryFormData,
   QueryFormOrderBy,
   buildQueryContext,
@@ -49,11 +48,14 @@ export default function buildQuery(formData: QueryFormData) {
       sort_y_axis.includes('asc'),
     ]);
   }
+  const groupbyColumn = ensureIsArray(groupby)[0];
   const group_by =
     normalize_across === 'x'
       ? getColumnLabel(x_axis)
       : normalize_across === 'y'
-        ? getColumnLabel(groupby as unknown as QueryFormColumn)
+        ? groupbyColumn
+          ? getColumnLabel(groupbyColumn)
+          : undefined
         : undefined;
   return buildQueryContext(formData, baseQueryObject => [
     {
