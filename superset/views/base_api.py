@@ -427,7 +427,19 @@ class BaseSupersetModelRestApi(BaseSupersetApiMixin, ModelRestApi):
             search_columns=self.search_columns,
             search_filters=self.search_filters,
         )
-        filters.rest_add_filters(rison_args.get(API_FILTERS_RIS_KEY, []))
+        rison_filters = rison_args.get(API_FILTERS_RIS_KEY, [])
+        # Strip filters with empty / null / whitespace-only values.
+        # An empty filter value matches everything in SQL (e.g.
+        # ``field.ilike("%%")``) but should behave like SQL: match
+        # nothing.  0, False and empty lists are still valid filter
+        # values and pass through.
+        rison_filters = [
+            f
+            for f in rison_filters
+            if f.get("value") is not None
+            and (not isinstance(f.get("value"), str) or f.get("value", "").strip())
+        ]
+        filters.rest_add_filters(rison_filters)
         return filters.get_joined_filters(self._base_filters)
 
     def _get_related_filter(

@@ -163,3 +163,87 @@ def test_handle_filters_args_returns_request_scoped_filters(
     fresh_filters = api.datamodel.get_filters.return_value
     assert fresh_filters.rest_add_filters.call_count == 2
     assert fresh_filters.get_joined_filters.call_count == 2
+
+
+def test_handle_filters_args_strips_empty_values(
+    session: Session,
+    client: Any,
+    full_api_access: None,
+) -> None:
+    """Filters with empty / null / whitespace-only values must be
+    stripped from the rison args so they don't match every row
+    (issue #33)."""
+    from flask_appbuilder.const import API_FILTERS_RIS_KEY
+
+    from superset.datasets.api import DatasetRestApi
+
+    api = DatasetRestApi()
+    api.datamodel = MagicMock()
+    api.search_columns = ["table_name"]
+    api.search_filters = {}
+    api._base_filters = MagicMock()  # noqa: SLF001
+
+    # — empty string value is stripped —
+    rison_args: dict[str, Any] = {
+        API_FILTERS_RIS_KEY: [
+            {"col": "table_name", "opr": "ct", "value": ""},
+        ],
+    }
+    api._handle_filters_args(rison_args)  # noqa: SLF001
+    fresh_filters = api.datamodel.get_filters.return_value
+    # rest_add_filters should receive an empty list
+    call_args = fresh_filters.rest_add_filters.call_args[0][0]
+    assert call_args == []
+
+    # — whitespace-only value is stripped —
+    api.datamodel.reset_mock()
+    rison_args = {
+        API_FILTERS_RIS_KEY: [
+            {"col": "table_name", "opr": "ct", "value": "   "},
+        ],
+    }
+    api._handle_filters_args(rison_args)  # noqa: SLF001
+    fresh_filters = api.datamodel.get_filters.return_value
+    call_args = fresh_filters.rest_add_filters.call_args[0][0]
+    assert call_args == []
+
+    # — None value is stripped —
+    api.datamodel.reset_mock()
+    rison_args = {
+        API_FILTERS_RIS_KEY: [
+            {"col": "table_name", "opr": "eq", "value": None},
+        ],
+    }
+    api._handle_filters_args(rison_args)  # noqa: SLF001
+    fresh_filters = api.datamodel.get_filters.return_value
+    call_args = fresh_filters.rest_add_filters.call_args[0][0]
+    assert call_args == []
+
+    # — valid value (including "0") passes through —
+    api.datamodel.reset_mock()
+    rison_args = {
+        API_FILTERS_RIS_KEY: [
+            {"col": "table_name", "opr": "ct", "value": "foo"},
+            {"col": "id", "opr": "eq", "value": 0},
+        ],
+    }
+    api._handle_filters_args(rison_args)  # noqa: SLF001
+    fresh_filters = api.datamodel.get_filters.return_value
+    call_args = fresh_filters.rest_add_filters.call_args[0][0]
+    assert len(call_args) == 2
+    assert call_args[0]["value"] == "foo"
+    assert call_args[1]["value"] == 0
+
+    # — mixed: only empty is stripped —
+    api.datamodel.reset_mock()
+    rison_args = {
+        API_FILTERS_RIS_KEY: [
+            {"col": "table_name", "opr": "ct", "value": ""},
+            {"col": "table_name", "opr": "ct", "value": "foo"},
+        ],
+    }
+    api._handle_filters_args(rison_args)  # noqa: SLF001
+    fresh_filters = api.datamodel.get_filters.return_value
+    call_args = fresh_filters.rest_add_filters.call_args[0][0]
+    assert len(call_args) == 1
+    assert call_args[0]["value"] == "foo"

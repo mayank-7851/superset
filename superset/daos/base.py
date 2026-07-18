@@ -76,6 +76,12 @@ class ColumnOperatorEnum(str, Enum):
     is_not_null = "is_not_null"
 
     def apply(self, column: Any, value: Any) -> Any:
+        # Empty or null filter values should match nothing, not
+        # everything (issue #33).  is_null/is_not_null are the
+        # exceptions — they ignore the value payload entirely.
+        if self not in (ColumnOperatorEnum.is_null, ColumnOperatorEnum.is_not_null):
+            if value is None or (isinstance(value, str) and not value.strip()):
+                return sa.false()
         op_func = operator_map.get(self)
         if not op_func:
             raise ValueError("Unsupported operator: %s" % self)

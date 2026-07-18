@@ -22,6 +22,7 @@ Unit tests for BaseDAO functionality using mocks and no database operations.
 from unittest.mock import Mock, patch
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
@@ -153,6 +154,92 @@ def test_column_operator_enum_apply_method() -> None:  # noqa: C901
     assert tested_operators == all_operators, (
         f"Missing operators: {all_operators - tested_operators}"
     )
+
+
+def test_column_operator_empty_value_returns_false() -> None:
+    """Empty or null filter values return ``sa.false()`` — i.e. match
+    nothing — instead of matching everything (issue #33)."""
+    Base_test = declarative_base()  # noqa: N806
+
+    class TestModel(Base_test):  # type: ignore
+        __tablename__ = "test_model"
+        id = Column(Integer, primary_key=True)
+        name = Column(String(50))
+        age = Column(Integer)
+
+    # Operators whose value should be treated as payload (skip null-check ops)
+    value_ops = [
+        ColumnOperatorEnum.eq,
+        ColumnOperatorEnum.ne,
+        ColumnOperatorEnum.sw,
+        ColumnOperatorEnum.ew,
+        ColumnOperatorEnum.ct,
+        ColumnOperatorEnum.gt,
+        ColumnOperatorEnum.gte,
+        ColumnOperatorEnum.lt,
+        ColumnOperatorEnum.lte,
+        ColumnOperatorEnum.like,
+        ColumnOperatorEnum.ilike,
+        ColumnOperatorEnum.in_,
+        ColumnOperatorEnum.nin,
+    ]
+
+    # — empty string value → sa.false() —
+    for op in value_ops:
+        result = op.apply(TestModel.name, "")
+        assert str(result) == str(sa.false()), (
+            f"{op.name} with empty string should return false()"
+        )
+
+    # — whitespace-only value → sa.false() —
+    for op in value_ops:
+        result = op.apply(TestModel.name, "   ")
+        assert str(result) == str(sa.false()), (
+            f"{op.name} with whitespace should return false()"
+        )
+
+    # — None value → sa.false() —
+    for op in value_ops:
+        result = op.apply(TestModel.age, None)
+        assert str(result) == str(sa.false()), (
+            f"{op.name} with None value should return false()"
+        )
+
+
+def test_column_operator_zero_value_not_empty() -> None:
+    """Filter value ``0`` for numeric columns is valid — not empty."""
+    Base_test = declarative_base()  # noqa: N806
+
+    class TestModel(Base_test):  # type: ignore
+        __tablename__ = "test_model"
+        id = Column(Integer, primary_key=True)
+        age = Column(Integer)
+
+    # 0 must NOT be treated as empty
+    result = ColumnOperatorEnum.eq.apply(TestModel.age, 0)
+    sql_str = str(result.compile(compile_kwargs={"literal_binds": True}))
+    assert "= 0" in sql_str or "test_model.age =" in sql_str
+
+
+def test_column_operator_is_null_empty_value_passthrough() -> None:
+    """is_null / is_not_null ignore the value payload entirely, so
+    they must NOT be short-circuited by the empty-value guard."""
+    Base_test = declarative_base()  # noqa: N806
+
+    class TestModel(Base_test):  # type: ignore
+        __tablename__ = "test_model"
+        id = Column(Integer, primary_key=True)
+        name = Column(String(50))
+
+    # is_null with empty string should still produce IS NULL
+    result = ColumnOperatorEnum.is_null.apply(TestModel.name, "")
+    sql_str = str(result.compile(compile_kwargs={"literal_binds": True}))
+    assert "IS NULL" in sql_str
+
+    # is_not_null with None should still produce IS NOT NULL
+    result = ColumnOperatorEnum.is_not_null.apply(TestModel.name, None)
+    sql_str = str(result.compile(compile_kwargs={"literal_binds": True}))
+    assert "IS NOT NULL" in sql_str
 
 
 def test_find_by_ids_sqlalchemy_error_with_model_cls():
