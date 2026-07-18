@@ -82,8 +82,17 @@ class ColumnOperatorEnum(str, Enum):
         return op_func(column, value)
 
 
-def _escape_like(value: str) -> str:
-    """Escape LIKE/ILIKE wildcards to prevent wildcard injection."""
+def _escape_like(value: Optional[str]) -> Optional[str]:
+    """Escape LIKE/ILIKE wildcards to prevent wildcard injection.
+
+    Returns ``None`` when *value* is ``None`` so callers can produce
+    SQL-faithful ``col LIKE NULL`` (never ``col LIKE '%None%'``).
+    Non-string values are coerced to ``str`` first.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
@@ -91,15 +100,15 @@ def _escape_like(value: str) -> str:
 operator_map: Dict[ColumnOperatorEnum, Any] = {
     ColumnOperatorEnum.eq: lambda col, val: col == val,
     ColumnOperatorEnum.ne: lambda col, val: col != val,
-    ColumnOperatorEnum.sw: lambda col, val: col.like(
-        f"{_escape_like(val)}%", escape="\\"
-    ),
-    ColumnOperatorEnum.ew: lambda col, val: col.like(
-        f"%{_escape_like(val)}", escape="\\"
-    ),
-    ColumnOperatorEnum.ct: lambda col, val: col.ilike(
-        f"%{_escape_like(val)}%", escape="\\"
-    ),
+    ColumnOperatorEnum.sw: lambda col, val: sa.false()
+        if val is None
+        else col.like(f"{_escape_like(str(val))}%", escape="\\"),
+    ColumnOperatorEnum.ew: lambda col, val: sa.false()
+        if val is None
+        else col.like(f"%{_escape_like(str(val))}", escape="\\"),
+    ColumnOperatorEnum.ct: lambda col, val: sa.false()
+        if val is None
+        else col.ilike(f"%{_escape_like(str(val))}%", escape="\\"),
     ColumnOperatorEnum.in_: lambda col, val: col.in_(
         val if isinstance(val, (list, tuple)) else [val]
     ),
@@ -110,12 +119,12 @@ operator_map: Dict[ColumnOperatorEnum, Any] = {
     ColumnOperatorEnum.gte: lambda col, val: col >= val,
     ColumnOperatorEnum.lt: lambda col, val: col < val,
     ColumnOperatorEnum.lte: lambda col, val: col <= val,
-    ColumnOperatorEnum.like: lambda col, val: col.like(
-        f"%{_escape_like(val)}%", escape="\\"
-    ),
-    ColumnOperatorEnum.ilike: lambda col, val: col.ilike(
-        f"%{_escape_like(val)}%", escape="\\"
-    ),
+    ColumnOperatorEnum.like: lambda col, val: sa.false()
+        if val is None
+        else col.like(f"%{_escape_like(str(val))}%", escape="\\"),
+    ColumnOperatorEnum.ilike: lambda col, val: sa.false()
+        if val is None
+        else col.ilike(f"%{_escape_like(str(val))}%", escape="\\"),
     ColumnOperatorEnum.is_null: lambda col, _: col.is_(None),
     ColumnOperatorEnum.is_not_null: lambda col, _: col.isnot(None),
 }
