@@ -33,8 +33,9 @@ def rank(
     :return: a flat DataFrame
     """
     if group_by:
-        gb = df.groupby(group_by, group_keys=False)
-        df["rank"] = gb.apply(lambda x: x[metric].rank(pct=True))
+        df["rank"] = df.groupby(group_by)[metric].transform(
+            lambda x: x.rank(pct=True)
+        )
     else:
         df["rank"] = df[metric].rank(pct=True)
     return df
