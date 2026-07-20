@@ -107,16 +107,41 @@ function mergeCreateFilterValues(list: Filter[], updateObj: QueryFilterState) {
   });
 }
 
+/**
+ * Returns true when a filter value should be considered "empty" and dropped.
+ *
+ * Empty filter values must be removed before they reach the backend: an empty
+ * string causes the backend to silently skip the filter (returning ALL rows
+ * instead of none), and non-text values crash ``_escape_like``.  SQL semantics
+ * apply — an empty or null filter value matches nothing, not everything.
+ */
+function isFilterValueEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  if (typeof value === 'string') {
+    // Use a regex (\\s covers all Unicode whitespace including \\u00a0)
+    // rather than .trim() which only handles ASCII whitespace.
+    return /^\s*$/.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+  // Empty plain objects ({}) are not valid filter values and should be
+  // treated as empty. Objects with own properties (e.g. { label, value }
+  // from select filters) are valid and pass through. Date, RegExp, and
+  // other built-in objects have no own enumerable properties and are
+  // treated as empty.
+  if (typeof value === 'object' && value !== null) {
+    return Object.keys(value).length === 0;
+  }
+  return false;
+}
+
 // convert filters from UI objects to data objects
 export function convertFilters(fts: InternalFilter[]): FilterValue[] {
   return fts
-    .filter(
-      f =>
-        !(
-          typeof f.value === 'undefined' ||
-          (Array.isArray(f.value) && !f.value.length)
-        ),
-    )
+    .filter(f => !isFilterValueEmpty(f.value))
     .flatMap(({ value, operator, id }) => {
       // handle between filter using 2 api filters
       if (operator === 'between' && Array.isArray(value)) {
