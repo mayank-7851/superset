@@ -92,7 +92,9 @@ def _escape_like(value: Any) -> str:
     first, because coercing ``None`` to ``""`` would build a wildcard-only
     pattern (``%%``) that matches every row.
     """
-    return str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    if not isinstance(value, str):
+        value = str(value)
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _like_op(template: str, case_insensitive: bool = False) -> Any:
@@ -797,7 +799,7 @@ class BaseDAO(CoreBaseDAO[T], Generic[T]):
         query = cls._apply_base_filter(
             query, skip_base_filter=skip_base_filter, data_model=data_model
         )
-        if search and search_columns:
+        if isinstance(search, str) and search.strip() and search_columns:
             search_filters = []
             for column_name in search_columns:
                 if hasattr(cls.model_cls, column_name):
@@ -868,7 +870,7 @@ class BaseDAO(CoreBaseDAO[T], Generic[T]):
             # Fallback: query the full model
             query = data_model.session.query(cls.model_cls)
         query = cls._apply_base_filter(query, data_model=data_model)
-        if search and search_columns:
+        if isinstance(search, str) and search.strip() and search_columns:
             search_filters = []
             for column_name in search_columns:
                 if hasattr(cls.model_cls, column_name):

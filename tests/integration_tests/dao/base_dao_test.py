@@ -838,6 +838,96 @@ def test_base_dao_list_search_wildcard_injection(user_with_data: Session) -> Non
     user_with_data.commit()
 
 
+def test_base_dao_list_search_empty_string_returns_none(
+    user_with_data: Session,
+) -> None:
+    """An empty-string search must match NO rows, not ALL rows.
+
+    Regressions: an empty string is falsy in Python, and the old guard
+    ``if search`` silently skipped the filter, returning all rows.
+    """
+    users = []
+    for i in range(3):
+        user = User(
+            id=440 + i,
+            username=f"emptysrch_{i}",
+            first_name=f"EmptySrch{i}",
+            last_name="User",
+            email=f"emptysrch{i}@example.com",
+            active=True,
+        )
+        users.append(user)
+        user_with_data.add(user)
+    user_with_data.commit()
+
+    # Empty string — must match nothing
+    results, total = UserDAO.list(
+        search="", search_columns=["username", "first_name"]
+    )
+    assert total == 0, f"empty search returned {total} rows, expected 0"
+
+    # Whitespace-only string — must match nothing
+    results2, total2 = UserDAO.list(
+        search="   ", search_columns=["username", "first_name"]
+    )
+    assert total2 == 0, f"whitespace search returned {total2} rows, expected 0"
+
+    for user in users:
+        user_with_data.delete(user)
+    user_with_data.commit()
+
+
+def test_base_dao_list_search_non_string_value(
+    user_with_data: Session,
+) -> None:
+    """A non-string search value (None, int) must not crash.
+
+    The search guard ``isinstance(search, str)`` drops non-string values
+    before they reach ``_escape_like``.
+    """
+    users = []
+    for i in range(3):
+        user = User(
+            id=450 + i,
+            username=f"nontxtsrch_{i}",
+            first_name=f"NonTxt{i}",
+            last_name="User",
+            email=f"nontxtsrch{i}@example.com",
+            active=True,
+        )
+        users.append(user)
+        user_with_data.add(user)
+    user_with_data.commit()
+
+    # None — should not crash and should return all rows (no filter applied)
+    results, total = UserDAO.list(
+        search=None, search_columns=["username", "first_name"]
+    )
+    assert isinstance(results, list)
+    assert total >= 3
+    result_usernames = {r.username for r in results}
+    for user in users:
+        assert user.username in result_usernames, (
+            f"search=None should not filter out '{user.username}'"
+        )
+
+    # Integer — should not crash and should return all rows
+    results2, total2 = UserDAO.list(
+        search=42, search_columns=["username", "first_name"]
+    )
+    assert isinstance(results2, list)
+    assert total2 >= 3
+    result_usernames2 = {r.username for r in results2}
+    for user in users:
+        assert user.username in result_usernames2, (
+            f"search=42 should not filter out '{user.username}'"
+        )
+
+    for user in users:
+        user_with_data.delete(user)
+    user_with_data.commit()
+
+
 def test_base_dao_list_column_operator_wildcard_injection(
     user_with_data: Session,
 ) -> None:
